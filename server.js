@@ -2,13 +2,20 @@ require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const expect = require('chai');
-const socket = require('socket.io');
 const cors = require('cors');
-
 const fccTestingRoutes = require('./routes/fcctesting.js');
 const runner = require('./test-runner.js');
-
+const helmet = require('helmet');
+const Collectible = require('./public/Collectible.mjs');
+const Player = require('./public/Player.mjs');
 const app = express();
+
+
+
+app.use(helmet.noSniff());
+app.use(helmet.xssFilter());
+app.use(helmet.dnsPrefetchControl());
+app.use(helmet.hidePoweredBy());
 
 app.use('/public', express.static(process.cwd() + '/public'));
 app.use('/assets', express.static(process.cwd() + '/assets'));
@@ -24,6 +31,7 @@ app.route('/')
   .get(function (req, res) {
     res.sendFile(process.cwd() + '/views/index.html');
   }); 
+
 
 //For FCC testing purposes
 fccTestingRoutes(app);
@@ -52,5 +60,17 @@ const server = app.listen(portNum, () => {
     }, 1500);
   }
 });
+
+const options = { /* ... */ };
+const io = require('socket.io')(server, options);
+
+// socket.io implementation
+io.on('connection', socket => { 
+  // item = new Collectible()
+  socket.on('position', (elem1) => {
+    console.log(elem1);
+  });
+});
+
 
 module.exports = app; // For testing
