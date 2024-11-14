@@ -7,15 +7,18 @@ const fccTestingRoutes = require('./routes/fcctesting.js');
 const runner = require('./test-runner.js');
 const helmet = require('helmet');
 const Collectible = require('./public/Collectible.mjs');
-const Player = require('./public/Player.mjs');
 const app = express();
 
+app.use((req, res, next) => {
+  res.setHeader('X-Powered-By', 'PHP 7.4.3');
+  next();
+});
 
 
+app.use(helmet.noCache());
 app.use(helmet.noSniff());
 app.use(helmet.xssFilter());
 app.use(helmet.dnsPrefetchControl());
-app.use(helmet.hidePoweredBy());
 
 app.use('/public', express.static(process.cwd() + '/public'));
 app.use('/assets', express.static(process.cwd() + '/assets'));
@@ -64,12 +67,82 @@ const server = app.listen(portNum, () => {
 const options = { /* ... */ };
 const io = require('socket.io')(server, options);
 
+// Global collectible declaration
+let collectible;
+let collectibleSpawned = false;
+let collectibleId = 0
+// Players tracker
+let players = [];
+
 // socket.io implementation
 io.on('connection', socket => { 
-  // item = new Collectible()
-  socket.on('position', (elem1) => {
-    console.log(elem1);
+  // Spawing collectible 
+  
+
+  // Listen to client after player instantiation
+  socket.on('make player', (player) => {
+    players.push(player);
+
+    // Broadcast the player array so everyone can see character updates
+    if (!collectibleSpawned) {
+      collectible = new Collectible({
+        x: Math.abs(Math.random() * 640 - 10),
+        y: Math.abs(Math.random() * 480 - 10),
+        id: collectibleId
+      })
+      collectibleSpawned = true;
+      collectibleId += 1;
+    }
+    
+    io.emit('broadcast players', players, collectible);
   });
+  
+  // Handle disconnections
+  socket.on('disconnect', (removed) => {
+    players.forEach((e, index) => {
+      if (e.id === socket.id) {
+        players.splice(index, 1);
+      }
+    });
+
+    if (players.length === 0) {
+      collectibleSpawned = false;
+    }
+
+    // Update the players with the removed player instance
+    socket.broadcast.emit('broadcast players', players, collectible);
+  })
+
+  // Listen to client after player moved
+  socket.on('move player', (player) => {
+    players.forEach((e, index) => {
+      if (e.id === player.id) {
+        players[index] = player
+      };
+    });
+
+    // Broadcast new character position
+    io.emit('broadcast players', players, collectible);
+  });
+
+  
+  socket.on('respawn item', (message, player) => {
+    collectible = new Collectible({
+      x: Math.abs(Math.random() * 640 - 10),
+      y: Math.abs(Math.random() * 480 - 10),
+      id: collectibleId
+    })
+    collectibleSpawned = true;
+    collectibleId += 1;
+
+    players.forEach((e, index) => {
+      if (e.id === player.id) {
+        players[index] = player;
+      }
+    })
+
+    io.emit('broadcast players', players, collectible);
+  })
 });
 
 
